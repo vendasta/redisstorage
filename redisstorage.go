@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/go-redis/redis"
 )
@@ -22,6 +23,8 @@ type Storage struct {
 	Prefix string
 	// Client is the redis connection
 	Client *redis.Client
+	// Expires is when the item saved to redis will expire
+	Expires time.Duration
 
 	mu sync.RWMutex // Only used for cookie methods.
 }
@@ -63,7 +66,7 @@ func (s *Storage) Clear() error {
 
 // Visited implements colly/storage.Visited()
 func (s *Storage) Visited(requestID uint64) error {
-	return s.Client.Set(s.getIDStr(requestID), "1", 0).Err()
+	return s.Client.Set(s.getIDStr(requestID), "1", s.Expires).Err()
 }
 
 // IsVisited implements colly/storage.IsVisited()
