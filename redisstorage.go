@@ -26,6 +26,9 @@ type Storage struct {
 	// Expires is when the item saved to redis will expire
 	Expires time.Duration
 
+	//ClientTimeOut is to set when the application client connections will timeout and close
+	ClientTimeOut time.Duration
+
 	mu sync.RWMutex // Only used for cookie methods.
 }
 
@@ -33,9 +36,10 @@ type Storage struct {
 func (s *Storage) Init() error {
 	if s.Client == nil {
 		s.Client = redis.NewClient(&redis.Options{
-			Addr:     s.Address,
-			Password: s.Password,
-			DB:       s.DB,
+			Addr:       s.Address,
+			Password:   s.Password,
+			DB:         s.DB,
+			MaxConnAge: s.ClientTimeOut,
 		})
 	}
 	_, err := s.Client.Ping().Result()
