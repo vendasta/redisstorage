@@ -46,12 +46,13 @@ func (s *Storage) Init() error {
 			},
 			MaxIdle: 10,
 		}
+
+		_, err := redis.DoWithTimeout(s.Pool.Get(), 250*time.Millisecond, "PING")
+		if err != nil {
+			return fmt.Errorf("redis connection error: %s", err.Error())
+		}
 	}
 
-	_, err := redis.DoWithTimeout(s.Pool.Get(), 250*time.Millisecond, "PING")
-	if err != nil {
-		return fmt.Errorf("redis connection error: %s", err.Error())
-	}
 	return nil
 }
 
