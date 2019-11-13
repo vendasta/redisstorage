@@ -62,17 +62,17 @@ func (s *Storage) Clear() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	keys, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*250, "Keys", s.getCookieID("*")))
+	keys, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*250, "KEYS", s.getCookieID("*")))
 	if err != nil {
 		return err
 	}
-	keys2, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*250, s.Prefix+":request:*"))
+	keys2, err := redis.Values(redis.DoWithTimeout(conn, time.Millisecond*250, "KEYS", fmt.Sprintf("%s:request:*", s.Prefix)))
 	if err != nil {
 		return err
 	}
 	keys = append(keys, keys2...)
 	keys = append(keys, s.getQueueID())
-	_, err = redis.DoWithTimeout(conn, time.Millisecond*250, "Del", keys...)
+	_, err = redis.DoWithTimeout(conn, time.Millisecond*250, "DEL", keys...)
 	return err
 }
 
@@ -81,7 +81,11 @@ func (s *Storage) Visited(requestID uint64) error {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "Set", s.getIDStr(requestID), "1", s.Expires)
+	expiry := int(s.Expires.Seconds())
+	if expiry <= 0 {
+		expiry = 600
+	}
+	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "SETEX", s.getIDStr(requestID), expiry, "1")
 	return err
 }
 
@@ -90,7 +94,7 @@ func (s *Storage) IsVisited(requestID uint64) (bool, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "Get", s.getIDStr(requestID))
+	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "GET", s.getIDStr(requestID))
 	if err == redis.ErrNil {
 		return false, nil
 	} else if err != nil {
@@ -112,7 +116,12 @@ func (s *Storage) SetCookies(u *url.URL, cookies string) {
 	// ('last update wins' == best avoided).
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "Set", s.getCookieID(u.Host), cookies, s.Expires)
+
+	expiry := int(s.Expires.Seconds())
+	if expiry <= 0 {
+		expiry = 600
+	}
+	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "SETEX", s.getCookieID(u.Host), expiry, cookies)
 	if err != nil {
 		log.Printf("SetCookies() .Set error %s", err)
 		return
@@ -127,7 +136,7 @@ func (s *Storage) Cookies(u *url.URL) string {
 	// TODO(js) Cookie methods currently have no way to return an error.
 
 	s.mu.RLock()
-	cookiesStr, err := redis.String(redis.DoWithTimeout(conn, time.Millisecond*250, "Get", s.getCookieID(u.Host)))
+	cookiesStr, err := redis.String(redis.DoWithTimeout(conn, time.Millisecond*250, "GET", s.getCookieID(u.Host)))
 	s.mu.RUnlock()
 	if err == redis.ErrNil {
 		cookiesStr = ""
@@ -143,7 +152,7 @@ func (s *Storage) AddRequest(r []byte) error {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "RPush", s.getQueueID(), r)
+	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "RPUSH", s.getQueueID(), r)
 	if err != nil {
 		return err
 	}
@@ -155,7 +164,7 @@ func (s *Storage) GetRequest() ([]byte, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	r, err := redis.Bytes(redis.DoWithTimeout(conn, time.Millisecond*250, "LPop", s.getQueueID()))
+	r, err := redis.Bytes(redis.DoWithTimeout(conn, time.Millisecond*250, "LPOP", s.getQueueID()))
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +176,7 @@ func (s *Storage) QueueSize() (int, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	return redis.Int(redis.DoWithTimeout(conn, time.Millisecond*250, "LLen", s.getQueueID()))
+	return redis.Int(redis.DoWithTimeout(conn, time.Millisecond*250, "LLEN", s.getQueueID()))
 }
 
 func (s *Storage) getIDStr(ID uint64) string {
