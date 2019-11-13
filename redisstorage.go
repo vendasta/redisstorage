@@ -94,7 +94,7 @@ func (s *Storage) IsVisited(requestID uint64) (bool, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
 
-	_, err := redis.DoWithTimeout(conn, time.Millisecond*250, "GET", s.getIDStr(requestID))
+	_, err := redis.String(redis.DoWithTimeout(conn, time.Millisecond*250, "GET", s.getIDStr(requestID)))
 	if err == redis.ErrNil {
 		return false, nil
 	} else if err != nil {
